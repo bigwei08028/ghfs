@@ -3,7 +3,8 @@ A lightweight, high-performance web file server, expert in intranet file sharing
 
 GoHttpFileServer /GHFS — 项目说明
 ==============================
-
+详细介绍请访问： http://www.bigtail.net/s/ghfs
+==============================
 简介
 ----
 一个用 Go 实现的轻量文件服务器，兼容 ghfs 习惯，内置前端页面（React + 本地静态资源），支持多用户、目录权限、只读控制、断点续传式大文件上传、整目录压缩下载与在线解压上传。单文件 exe 即可跨平台运行（Windows/macOS/Linux，需目标机器有 Go 构建产物即可）。
