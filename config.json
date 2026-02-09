@@ -1,0 +1,26 @@
+{
+  "listen": ":8901",
+  "root": "./data",
+  "tempDir": "./tmp/.tmp",
+  "enableAuth": true,
+  "users": [
+    {
+      "username": "admin",
+      "password": "9bcd32afaf4013fc45f209c50f0b6067",
+      "home": "",
+      "isAdmin": true,
+      "readOnly": false
+    },
+    {
+      "username": "alice",
+      "password": "9bcd32afaf4013fc45f209c50f0b6067",
+      "home": "alice",
+      "isAdmin": false,
+      "readOnly": false
+    }
+  ],
+  "maxUploadMB": 1024,
+  "corsOrigins": [
+    "*"
+  ]
+}

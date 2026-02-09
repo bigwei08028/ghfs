@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>GHFS内网文件共享服务</title>
+  <!-- 本地优先，失败回退 CDN -->
+  <script src="libs/react.development.js" crossorigin onerror="this.onerror=null;this.src='https://unpkg.com/react@18/umd/react.development.js'"></script>
+  <script src="libs/react-dom.development.js" crossorigin onerror="this.onerror=null;this.src='https://unpkg.com/react-dom@18/umd/react-dom.development.js'"></script>
+  <script src="libs/babel.min.js" crossorigin onerror="this.onerror=null;this.src='https://unpkg.com/babel-standalone@6/babel.min.js'"></script>
+  <script src="libs/jszip.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'"></script>
+  <link rel="stylesheet" href="libs/material-icons.css" />
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #171d24;
+      --card: #1f2731;
+      --hover: #27313d;
+      --accent: #6366f1;
+      --accent2: #10b981;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --border: #26303b;
+      --radius: 10px;
+      --shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    body.light {
+      --bg: #f4f6fb;
+      --panel: #ffffff;
+      --card: #ffffff;
+      --hover: #eef2ff;
+      --accent: #4f46e5;
+      --accent2: #10b981;
+      --text: #111827;
+      --muted: #4b5563;
+      --border: #e5e7eb;
+      --shadow: 0 6px 18px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+    header { display:flex; justify-content:space-between; align-items:center; padding:18px 24px; background:var(--panel); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:10; }
+    body:not(.logged-in) header { display:none; }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-badge { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,var(--accent),#a855f7); display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:var(--shadow); }
+    .top-actions { display:flex; align-items:center; gap:10px; }
+    .user { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); color:var(--muted); }
+    .avatar { width:26px; height:26px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-weight:700; color:#0f1419; }
+    main { width:100%; max-width:none; margin:0 auto; padding:20px 24px; box-sizing:border-box; }
+    .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+    button, label.button { border:none; border-radius:var(--radius); padding:10px 14px; background:var(--card); color:var(--text); cursor:pointer; display:inline-flex; align-items:center; gap:8px; transition:all .15s; border:1px solid var(--border); white-space:nowrap; }
+    button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    button:hover, label.button:hover { background:var(--hover); }
+    button.primary:hover { background:#7b7ef6; }
+    .breadcrumb { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--muted); flex-wrap:wrap; }
+    .crumb { cursor:pointer; }
+    .crumb:last-child { color:var(--text); cursor:default; }
+    .list-head, .row { display:grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr; gap:10px; padding:12px 14px; align-items:center; width:100%; box-sizing:border-box; }
+    .list-head { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); color:var(--muted); }
+    .row { border-bottom:1px solid var(--border); }
+    .row:hover { background:var(--hover); border-radius:var(--radius); }
+    .actions { display:flex; gap:8px; }
+    .upload-zone-inline { border:1px dashed var(--border); border-radius:var(--radius); padding:10px 14px; background:var(--panel); white-space:nowrap; }
+    .login-card { background:var(--card); padding:32px; border-radius:16px; width:360px; box-shadow:var(--shadow); border:1px solid var(--border); }
+    .stack { display:grid; gap:12px; }
+    input { width:100%; padding:10px 12px; border-radius:var(--radius); border:1px solid var(--border); background:#0f161c; color:var(--text); }
+    .icon-btn { width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:var(--radius); background:var(--card); border:1px solid var(--border); color:var(--text); cursor:pointer; text-decoration:none; }
+    .modal { position:fixed; inset:0; background:rgba(0,0,0,0.55); display:flex; align-items:center; justify-content:center; z-index:100; }
+    .modal-body { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; width:900px; max-height:80vh; overflow:auto; box-sizing:border-box; }
+    /* 顶部提示样式 */
+    .toast {
+      position:fixed;
+      top:12px;
+      left:50%;
+      transform:translateX(-50%) translateY(-8px);
+      background:var(--panel);
+      color:var(--text);
+      padding:12px 18px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+      opacity:0;
+      pointer-events:none;
+      transition:all .25s ease;
+      z-index:120;
+      font-weight:600;
+      letter-spacing:0.3px;
+    }
+    .toast.show {
+      opacity:1;
+      transform:translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <div class="logo-badge"><span class="material-icons-outlined">cloud</span></div>
+      <div>
+        <div style="font-weight:600;"> GHFS </div>
+        <div style="font-size:12px; color:var(--muted)">GoHttpFileServer · 一个轻量级高性能的web文件服务器 · 内网文件共享专家</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="theme-btn" title="切换主题">
+        <span class="material-icons-outlined">light_mode</span>
+      </button>
+      <a class="icon-btn" href="https://www.bigtail.net/s/ghfs/ghfs.html" target="_blank" rel="noopener" title="About">
+        <span class="material-icons-outlined">info</span>
+      </a>
+      <a class="icon-btn" href="https://github.com/bigwei08028/ghfs" target="_blank" rel="noopener" title="GitHub">
+        <span class="material-icons-outlined">code</span>
+      </a>
+      <div class="user">
+        <div class="avatar" id="avatar">?</div>
+        <span id="username">未登录</span>
+      </div>
+      <button class="icon-btn" id="logout-btn" title="退出" style="display:none;">
+        <span class="material-icons-outlined">logout</span>
+      </button>
+    </div>
+  </header>
+  <main id="app"></main>
+
+  <script type="text/babel">
+    const apiBase = "/api";
+    const human = (bytes) => {
+      if (bytes === 0) return "0 B";
+      if (!bytes) return "-";
+      const units = ["B","KB","MB","GB","TB"];
+      let i = 0, v = bytes;
+      while (v >= 1024 && i < units.length-1) { v /= 1024; i++; }
+      return v.toFixed(1) + " " + units[i];
+    };
+    const toast = (msg) => {
+      const el = document.createElement("div");
+      el.className = "toast";
+      el.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%) translateY(-8px);";
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(()=>el.classList.add("show"), 10);
+      setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=>el.remove(), 300); }, 2500);
+    };
+    const authHeader = (token) => token ? ({ Authorization: "Basic " + token }) : {};
+
+    const Login = ({onLogin}) => {
+      const [user, setUser] = React.useState("admin");
+      const [pass, setPass] = React.useState("admin");
+      const submit = (e) => {
+        e.preventDefault();
+        const token = btoa(user + ":" + pass);
+        fetch(`${apiBase}/health`, { headers: { Authorization: "Basic " + token } })
+          .then(res => {
+            if (!res.ok) throw new Error("用户名或密码错误");
+            localStorage.setItem("auth_token", token);
+            onLogin(token, user);
+          })
+          .catch(err => toast(err.message || "登录失败"));
+      };
+      return (
+        <div style={{minHeight:"calc(100vh - 80px)", display:"flex", alignItems:"center", justifyContent:"center"}}>
+          <div className="login-card">
+            <div className="logo" style={{marginBottom:"20px"}}>
+              <div className="logo-badge"><span className="material-icons-outlined">cloud</span></div>
+              <div>
+                <div style={{fontWeight:600}}>GHFS内网文件共享服务</div>
+                <div style={{fontSize:"12px", color:"var(--muted)"}}>登录</div>
+              </div>
+            </div>
+            <form onSubmit={submit} className="stack">
+              <input value={user} onChange={e=>setUser(e.target.value)} placeholder="用户名" />
+              <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="密码" />
+              <button className="primary" type="submit" style={{width:"100%", justifyContent:"center"}}>登录</button>
+            </form>
+          </div>
+        </div>
+      );
+    };
+
+    function FileManager({token, setToken, username, setUsername}) {
+      const [path, setPath] = React.useState("");
+      const [items, setItems] = React.useState([]);
+      const [uploading, setUploading] = React.useState(null);
+      const [chunkState, setChunkState] = React.useState(null);
+      const [showUsers, setShowUsers] = React.useState(false);
+      const [users, setUsers] = React.useState([]);
+      const [userForm, setUserForm] = React.useState({username:"", password:"", home:"", isAdmin:false, readOnly:false});
+      const [readOnly, setReadOnly] = React.useState(false);
+
+      React.useEffect(() => {
+        if (token) {
+          fetch(`${apiBase}/me`, { headers: authHeader(token) })
+            .then(res => { if(!res.ok) throw new Error(); return res.json(); })
+            .then(info => {
+              const name = info.username || "";
+              setUsername(name);
+              const avatarEl = document.getElementById("avatar");
+              if (avatarEl) avatarEl.textContent = name && name.length ? name.charAt(0).toUpperCase() : "?";
+              document.getElementById("username").textContent = name || "已登录";
+              document.getElementById("logout-btn").style.display = "flex";
+              const ro = !!info.readOnly;
+              setReadOnly(ro);
+              window.CF_READONLY = ro;
+            })
+            .catch(()=> {
+              setReadOnly(false);
+              window.CF_READONLY = false;
+            });
+        }
+      }, [token, setUsername]);
+
+      const load = React.useCallback(() => {
+        if (!token) return;
+        fetch(`${apiBase}/list?path=${encodeURIComponent(path)}`, { headers: authHeader(token) })
+          .then(res => {
+            if (res.status === 401) throw new Error("401");
+            if (!res.ok) return res.text().then(t => { throw new Error(t); });
+            return res.json();
+          })
+          .then(data => Array.isArray(data) ? setItems(data) : setItems([]))
+          .catch(e => {
+            if (e.message === "401") {
+              toast("认证失效，请重新登录");
+              localStorage.removeItem("auth_token");
+              setToken("");
+              setItems([]);
+              return;
+            }
+            setItems([]);
+            toast("加载失败: " + e.message);
+          });
+      }, [path, token, setToken]);
+
+      React.useEffect(load, [load]);
+
+      const navigateUp = () => {
+        if (!path) return;
+        const parent = path.split("/").slice(0,-1).join("/");
+        setPath(parent);
+      };
+
+      const breadcrumb = ["根目录", ...path.split("/").filter(Boolean)];
+
+      const onFilesSelected = (ev) => {
+        if (readOnly) { toast("只读用户不可上传"); return; }
+        const files = ev.target.files;
+        if (!files.length) return;
+        const fd = new FormData();
+        for (const f of files) {
+          const rel = path ? `${path}/${f.name}` : f.name;
+          fd.append("files", f, f.name);
+          fd.append("relpaths", rel);
+        }
+        setUploading({ name: "上传中", progress: 0 });
+        fetch(`${apiBase}/upload`, { method:"POST", headers: authHeader(token), body: fd })
+          .then(res => { if (!res.ok) throw new Error(res.statusText); return res.json(); })
+          .then(()=>{ toast("上传成功"); setUploading(null); load(); })
+          .catch(e=>{ toast("上传失败: "+e.message); setUploading(null); });
+      };
+
+      const createFolder = () => {
+        if (readOnly) { toast("只读用户不可创建"); return; }
+        const name = prompt("新建文件夹名称");
+        if (!name) return;
+        const folderPath = path ? `${path}/${name}` : name;
+        fetch(`${apiBase}/mkdir`, {
+          method:"POST",
+          headers:{ "Content-Type":"application/json", ...authHeader(token) },
+          body: JSON.stringify({ path: folderPath })
+        }).then(res => { if(!res.ok) throw new Error(res.statusText); toast("创建成功"); load(); })
+          .catch(e=>toast("创建失败: "+e.message));
+      };
+
+      const extractFilename = (disp, fallback) => {
+        if (!disp) return fallback;
+        const fnStar = disp.match(/filename\\*\\s*=\\s*UTF-8''([^;\\n]+)/i);
+        if (fnStar && fnStar[1]) {
+          try { return decodeURIComponent(fnStar[1]); } catch (_) {}
+          return fnStar[1];
+        }
+        const fn = disp.match(/filename\\s*=\\s*\"?([^\";]+)/i);
+        if (fn && fn[1]) return fn[1];
+        return fallback;
+      };
+
+      const download = (item) => {
+        const url = item.isDir
+          ? `${apiBase}/download-zip?path=${encodeURIComponent(item.path)}`
+          : `${apiBase}/download?path=${encodeURIComponent(item.path)}`;
+        fetch(url, { headers: authHeader(token) })
+          .then(res => {
+            if (!res.ok) throw new Error(res.statusText || "下载失败");
+            const disp = res.headers.get("content-disposition") || "";
+            const filename = extractFilename(disp, item.name);
+            return res.blob().then(blob => ({ blob, filename }));
+          })
+          .then(({blob, filename}) => {
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+          })
+          .catch(e => toast("下载失败: " + e.message));
+      };
+
+      const remove = (item) => {
+        if (readOnly) { toast("只读用户不可删除"); return; }
+        if (!confirm(`删除 ${item.name}?`)) return;
+        fetch(`${apiBase}/files?path=${encodeURIComponent(item.path)}`, { method:"DELETE", headers: authHeader(token) })
+          .then(res => { if(!res.ok) throw new Error(res.statusText); toast("删除成功"); load(); })
+          .catch(e=>toast("删除失败: "+e.message));
+      };
+
+      const rename = (item) => {
+        if (readOnly) { toast("只读用户不可重命名"); return; }
+        const name = prompt("重命名为", item.name);
+        if (!name) return;
+        fetch(`${apiBase}/rename`, {
+          method:"POST",
+          headers:{ "Content-Type":"application/json", ...authHeader(token) },
+          body: JSON.stringify({ path: item.path, newName: name })
+        }).then(res=>{ if(!res.ok) throw new Error(res.statusText); load(); })
+          .catch(e=>toast("重命名失败: "+e.message));
+      };
+
+      const createZipAndUpload = (files) => {
+        if (readOnly) { toast("只读用户不可上传"); return; }
+        const zip = new JSZip();
+        for (const f of files) {
+          const rel = f.webkitRelativePath || f.name;
+          zip.file(rel, f);
+        }
+        setUploading({ name:"正在打包", progress:0 });
+        zip.generateAsync({ type:"blob", compression:"DEFLATE" }, meta => {
+          setUploading({ name:"正在打包", progress: meta.percent/100 });
+        }).then(blob => {
+          const fd = new FormData();
+          fd.append("zipfile", blob, "folder.zip");
+          fd.append("dest", path);
+          setUploading({ name:"上传 ZIP", progress:0 });
+          return fetch(`${apiBase}/upload/zip`, { method:"POST", headers: authHeader(token), body: fd });
+        }).then(res => { if(!res.ok) throw new Error(res.statusText); toast("上传成功"); setUploading(null); load(); })
+          .catch(e=>{ toast("上传失败: "+e.message); setUploading(null); });
+      };
+
+      const onDrop = (e) => {
+        e.preventDefault();
+        const items = e.dataTransfer.items;
+        if (items && items[0] && items[0].webkitGetAsEntry && items[0].webkitGetAsEntry().isDirectory) {
+          const files = e.dataTransfer.files;
+          createZipAndUpload(files);
+        } else {
+          onFilesSelected({ target:{ files: e.dataTransfer.files }});
+        }
+      };
+
+      const logout = () => {
+        localStorage.removeItem("auth_token");
+        setToken("");
+        setUsername("");
+        document.body.classList.remove("logged-in");
+      };
+
+      // 绑定右上角退出
+      React.useEffect(() => {
+        const btn = document.getElementById("logout-btn");
+        if (btn) {
+          btn.onclick = logout;
+          btn.style.display = token ? "flex" : "none";
+        }
+        return () => { if (btn) btn.onclick = null; };
+      }, [token]);
+
+      // 用户管理
+      const loadUsers = () => {
+        fetch(`${apiBase}/users`, { headers: authHeader(token) })
+          .then(res=>{ if(!res.ok) throw new Error("加载用户失败"); return res.json(); })
+          .then(data=>setUsers(Array.isArray(data)?data:[]))
+          .catch(e=>toast(e.message));
+      };
+      const openUserMgr = () => { setShowUsers(true); loadUsers(); };
+      const closeUserMgr = () => setShowUsers(false);
+      const submitUser = () => {
+        const body = {...userForm};
+        const exists = users.find(u=>u.username===userForm.username);
+        const method = exists ? "PUT" : "POST";
+        fetch(`${apiBase}/users`, {
+          method,
+          headers: { "Content-Type":"application/json", ...authHeader(token) },
+          body: JSON.stringify(body)
+        }).then(res=>{
+          if(!res.ok) throw new Error("保存失败");
+          toast("保存成功");
+          setUserForm({username:"", password:"", home:"", isAdmin:false, readOnly:false});
+          loadUsers();
+        }).catch(e=>toast(e.message));
+      };
+      const deleteUser = (name) => {
+        if(!confirm(`删除用户 ${name}?`)) return;
+        fetch(`${apiBase}/users?username=${encodeURIComponent(name)}`, {
+          method:"DELETE",
+          headers: authHeader(token)
+        }).then(res=>{ if(!res.ok) throw new Error("删除失败"); loadUsers(); toast("已删除"); })
+        .catch(e=>toast(e.message));
+      };
+
+      return (
+        <div>
+          <div className="breadcrumb">
+            {breadcrumb.map((p,i)=>{
+              const clickPath = i===0 ? "" : breadcrumb.slice(1,i+1).join("/");
+              const last = i===breadcrumb.length-1;
+              return (
+                <span key={i}>
+                  {i>0 && <span style={{margin:"0 6px", color:"var(--muted)"}}>/</span>}
+                  <span className={"crumb"+(last?"":"")} onClick={()=>!last && setPath(clickPath)}>
+                    {p}
+                  </span>
+                </span>
+              );
+            })}
+            {readOnly && <span style={{marginLeft:10, color:"var(--muted)"}}>(只读)</span>}
+          </div>
+
+          <div className="toolbar">
+            <button onClick={navigateUp} disabled={!path}><span className="material-icons-outlined">arrow_upward</span>上一级</button>
+            {!readOnly && (
+              <React.Fragment>
+                <button className="primary" onClick={createFolder}><span className="material-icons-outlined">create_new_folder</span>新建文件夹</button>
+                <label className="button">
+                  <input type="file" multiple style={{display:"none"}} onChange={onFilesSelected} />
+                  <span className="material-icons-outlined">upload_file</span>上传文件
+                </label>
+                <label className="button">
+                  <input type="file" webkitdirectory="true" directory="true" multiple style={{display:"none"}} onChange={(e)=>createZipAndUpload(e.target.files)} />
+                  <span className="material-icons-outlined">folder_open</span>上传文件夹
+                </label>
+                <div className="upload-zone-inline" onDragOver={(e)=>e.preventDefault()} onDrop={onDrop}>
+                  拖拽文件/文件夹到此上传
+                </div>
+              </React.Fragment>
+            )}
+            {readOnly && (
+              <div className="upload-zone-inline" style={{color:"var(--muted)", borderStyle:"dotted"}}>
+                只读用户：仅可下载
+              </div>
+            )}
+            {username==="admin" && (
+              <button className="icon-btn" onClick={openUserMgr} title="用户管理">
+                <span className="material-icons-outlined">manage_accounts</span>
+              </button>
+            )}
+          </div>
+
+          {(uploading || chunkState) && (
+            <div className="card" style={{padding:"12px 16px", border:"1px solid var(--border)", borderRadius:"var(--radius)", marginBottom:"12px"}}>
+              <div style={{display:"flex", justifyContent:"space-between"}}>
+                <span>{uploading ? uploading.name : chunkState.name}</span>
+                <span>
+                  {uploading ? Math.round(uploading.progress*100) : Math.round(chunkState.progress/chunkState.total*100)}%
+                </span>
+              </div>
+              <progress value={uploading ? uploading.progress : chunkState.progress} max={uploading ? 1 : chunkState.total} style={{width:"100%", height:"10px"}}></progress>
+            </div>
+          )}
+
+          <div className="list-head">
+            <div>名称</div><div>大小</div><div>修改时间</div><div>操作</div>
+          </div>
+          {items.map(item=>(
+            <div className="row" key={item.path} onDoubleClick={()=>{ if(item.isDir) setPath(item.path); }}>
+              <div>{item.isDir ? "📁 " : "📄 "}{item.name}</div>
+              <div>{item.isDir ? "-" : human(item.size)}</div>
+              <div>{new Date(item.modTime).toLocaleString()}</div>
+              <div className="actions">
+                <button onClick={()=>download(item)}><span className="material-icons-outlined">download</span></button>
+                {!readOnly && (
+                  <React.Fragment>
+                    <button onClick={()=>rename(item)}><span className="material-icons-outlined">drive_file_rename_outline</span></button>
+                    <button onClick={()=>remove(item)}><span className="material-icons-outlined">delete</span></button>
+                  </React.Fragment>
+                )}
+              </div>
+            </div>
+          ))}
+          {items.length===0 && <div style={{padding:"16px", color:"var(--muted)"}}>空目录</div>}
+
+          {showUsers && (
+            <div className="modal">
+              <div className="modal-body">
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px"}}>
+                  <h3 style={{margin:0}}>用户管理</h3>
+                  <button className="icon-btn" onClick={closeUserMgr}><span className="material-icons-outlined">close</span></button>
+                </div>
+                <div className="stack" style={{marginBottom:"12px"}}>
+                  <div style={{display:"grid", gridTemplateColumns:"repeat(4, minmax(0,1fr))", gap:"10px", alignItems:"center"}}>
+                    <input placeholder="用户名" value={userForm.username} onChange={e=>setUserForm({...userForm, username:e.target.value})}/>
+                    <input placeholder="密码(留空不改)" type="password" value={userForm.password} onChange={e=>setUserForm({...userForm, password:e.target.value})}/>
+                    <input placeholder="可访问目录(相对根)" value={userForm.home} onChange={e=>setUserForm({...userForm, home:e.target.value})}/>
+                    <div style={{display:"flex", gap:"12px", alignItems:"center", whiteSpace:"nowrap"}}>
+                      <label style={{display:"flex", alignItems:"center", gap:"6px"}}>
+                        <input type="checkbox" checked={userForm.isAdmin} onChange={e=>setUserForm({...userForm, isAdmin:e.target.checked})}/>管理员
+                      </label>
+                      <label style={{display:"flex", alignItems:"center", gap:"6px"}}>
+                        <input type="checkbox" checked={userForm.readOnly} onChange={e=>setUserForm({...userForm, readOnly:e.target.checked})}/>只读
+                      </label>
+                    </div>
+                    <div style={{gridColumn:"1 / span 4", display:"flex", justifyContent:"flex-end"}}>
+                      <button className="primary" style={{justifyContent:"center", whiteSpace:"nowrap"}} onClick={submitUser}>保存用户</button>
+                    </div>
+                  </div>
+                </div>
+                <div style={{border:"1px solid var(--border)", borderRadius:"10px", padding:"8px"}}>
+                  <div style={{display:"grid", gridTemplateColumns:"1.2fr 1fr 0.6fr 0.6fr 0.6fr", color:"var(--muted)", padding:"6px 4px", borderBottom:"1px solid var(--border)"}}>
+                    <div>用户名</div><div>目录</div><div>管理员</div><div>只读</div><div>操作</div>
+                  </div>
+                  {users.map(u=>(
+                    <div key={u.username} style={{display:"grid", gridTemplateColumns:"1.2fr 1fr 0.6fr 0.6fr 0.6fr", padding:"6px 4px", borderBottom:"1px solid var(--border)"}}>
+                      <div>{u.username}</div>
+                      <div>{u.home||"/"}</div>
+                      <div>{u.isAdmin?"是":"否"}</div>
+                      <div>{u.readOnly?"是":"否"}</div>
+                      <div style={{display:"flex", gap:"6px"}}>
+                        <button onClick={()=>setUserForm({username:u.username, password:"", home:u.home, isAdmin:u.isAdmin, readOnly:u.readOnly})}>编辑</button>
+                        <button onClick={()=>deleteUser(u.username)} style={{background:"#2d3640"}}>删除</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function App() {
+      const [token, setToken] = React.useState(localStorage.getItem("auth_token") || "");
+      const [username, setUsername] = React.useState("");
+      const [theme, setTheme] = React.useState(localStorage.getItem("theme") || "dark");
+
+      React.useEffect(() => {
+        if (theme === "light") {
+          document.body.classList.add("light");
+        } else {
+          document.body.classList.remove("light");
+        }
+        localStorage.setItem("theme", theme);
+        const icon = document.querySelector("#theme-btn span");
+        if (icon) icon.textContent = theme === "light" ? "dark_mode" : "light_mode";
+      }, [theme]);
+
+      React.useEffect(() => {
+        const btn = document.getElementById("theme-btn");
+        if (btn) btn.onclick = () => setTheme((t)=> t==="light" ? "dark" : "light");
+      }, []);
+      React.useEffect(() => {
+        if (token) {
+          document.body.classList.add("logged-in");
+          document.body.classList.remove("login-mode");
+        } else {
+          document.body.classList.add("login-mode");
+          document.body.classList.remove("logged-in");
+        }
+      }, [token]);
+      if (!token) {
+        document.getElementById("logout-btn").style.display = "none";
+        document.getElementById("username").textContent = "未登录";
+        document.getElementById("avatar").textContent = "?";
+        return <Login onLogin={(t,u)=>{ setToken(t); setUsername(u); }} />;
+      }
+      return <FileManager token={token} setToken={setToken} username={username} setUsername={setUsername} />;
+    }
+
+    ReactDOM.createRoot(document.getElementById("app")).render(<App />);
+  </script>
+</body>
+</html>
